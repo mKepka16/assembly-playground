@@ -1,0 +1,12 @@
+{
+  "customLocalFormatters.formatters": [
+    {
+      "command": "python3 scripts/asmfmt.py -",
+      "languages": ["arm"]
+    }
+  ],
+  "[arm]": {
+    "editor.defaultFormatter": "jkillian.custom-local-formatters",
+    "editor.formatOnSave": true
+  }
+}
