@@ -1,0 +1,5 @@
+2.11
+.data, .bss, .text, .section name
+
+2.12
+Because .word puts value that takes 4B, which is already aligned to CPU word (assuming 32bit system). .ascii and .asciz are arrays of characters (bytes), they can be any length, not multiple of 4, that why we align them.

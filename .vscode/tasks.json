@@ -1,0 +1,32 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build-debug (syscall)",
+      "type": "shell",
+      "command": "make",
+      "args": ["build-debug", "FILE=${relativeFile}"],
+      "problemMatcher": []
+    },
+    {
+      "label": "build-debug (libc)",
+      "type": "shell",
+      "command": "make",
+      "args": ["build-debug-libc", "FILE=${relativeFile}"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Tail program output",
+      "type": "shell",
+      "command": "make",
+      "args": ["tail-output", "FILE=${relativeFile}"],
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "debug-output"
+      }
+    }
+  ]
+}

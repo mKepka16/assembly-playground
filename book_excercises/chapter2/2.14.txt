@@ -1,0 +1,1 @@
+This is because main and str lives in different sections: .data / .text. Offsets inside each section is relative to that section. Final, absolute addresses are set by linker, there, cannot be any collisions.
