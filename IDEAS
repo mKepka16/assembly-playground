@@ -1,0 +1,1 @@
+- Write \_start routine that calls main and handles args from kernel. Basically reinvent what glibc does under the hood - in simplified form.
