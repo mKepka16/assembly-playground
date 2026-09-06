@@ -1,0 +1,35 @@
+3.1
+stack pointer - r12 - no, r13
+return address - r11 -  no, r14
+program counter - r15 - good
+
+3.2
+Assuming we load constant value that can be loaded via `mov`, then it doesn't make any difference if we use mov or ldr, becaue ldr will be translated by assembler into mov instruction. Technically ldr adds some compile time overhead, but if it comes to actual program - there is no difference.
+
+3.3
+stmfd - full descending - this stores variable on stack in full descending mode which is the most common one - sp is on last filled address, stack grows downwards.
+stmia - block copy (like arrays which are referenced by first item (lowest address))
+
+3.4
+! means that after the operation, register that held address will be updated to new value.
+
+3.6
+All arithmetic operations must be done on registers, so if we want to perform some, we need to copy data from memory to register first.
+Also CPU registers are accessible for CPU instatly, where fetching/storing data from/to memory is costly via bus.
+
+3.7
+16, from r0 to r15 - wrong, there are 17 registers, last one being CPSR
+
+3.11
+`b` means branch, it is used for if statements and loops. It sets new pc.
+
+`bl` additional to above, it link. Meaning that it copies next instruction address (after the bl) into link return register, so that invoked routine knows where to come back after the execution. It is used to execute routines.
+
+3.12
+ldreq - load register, equal - if Z flag is 1
+ldrlt - load register, if cpu flags means lower than
+bgt - branch, if cpu flags means greater done
+bne - branch, if Z flag is 0, meaning flag means: non zero operation result
+bge - branch if cpu flags means: greater than or equal
+
+important: all above relate to signed operations, with unsigned operations they conditions would differ

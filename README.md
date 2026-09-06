@@ -5,150 +5,143 @@ assembly on macOS.
 
 ## How it works
 
-There's no way to run a Linux/ARM32 binary directly on macOS, and Homebrew's
-`qemu` build only ships full-system emulators (`qemu-system-arm`), not the
-`qemu-arm` user-mode binary you'd want for running a single ELF file. So this
-setup splits the work in two:
+There's no way to build or run a Linux/ARM32 binary directly on macOS, and
+Apple Silicon chips have no hardware AArch32 support at all — even ARM-on-ARM
+needs emulation. So everything happens inside one Docker container, built
+from the `Dockerfile` in this repo:
 
-1. **Assemble & link natively on macOS** using a cross-binutils toolchain
-   (`arm-linux-gnueabihf-as` / `-ld`) — fast, no emulation needed for this
-   step.
-2. **Run the resulting binary under emulation** via Docker Desktop, which
-   transparently uses QEMU (through `binfmt_misc` in its Linux VM) to execute
-   `linux/arm/v7` containers on your Mac.
+- **Building**: the image has the `arm-linux-gnueabihf-*` cross-toolchain
+  (`as`, `ld`, `gcc`) — these run natively on the container's own
+  architecture and just _target_ ARM32, no emulation needed to build.
+- **Running**: the image also has `qemu-user-static`, which provides
+  `qemu-arm-static` — a user-mode emulator that runs a single ARM32 ELF
+  binary directly (translating its instructions on the fly).
+- **Debugging**: plain `gdb` can't work here — see the Debugging section
+  below for why, and how `qemu-arm-static`'s own debug support gets around
+  it.
 
 ## Prerequisites
 
-- [Homebrew](https://brew.sh)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (must be
   running)
 
-Install the cross-assembler/linker:
+## Setup
+
+Build the image once (cached after that):
 
 ```sh
-brew install arm-linux-gnueabihf-binutils
+docker build -t asm-dev .
 ```
 
-No other setup is required — the first `make run` will pull the small Debian
-image used to execute the binary (cached after that).
-
-## Usage
-
-Write ARM32 assembly anywhere in the repo (see `book_excercises/`), using raw
-Linux syscalls (no libc), then:
+Start a container with this repo mounted, and get a shell in it:
 
 ```sh
-make run FILE=book_excercises/chapter2/some_example.s
+docker run -it --rm -v "$PWD":/work -w /work asm-dev bash
 ```
 
-This assembles and links the file with `arm-linux-gnueabihf-as`/`-ld`,
-producing a static binary in `build/`, then runs it inside an emulated
-ARMv7 container.
+Everything below runs _inside_ that shell, unless noted otherwise. `exit`
+(or Ctrl-D) leaves the container; `--rm` means it's thrown away on exit, so
+re-run the `docker run` line whenever you want a fresh shell (your files are
+safe — they live in this repo directory on your Mac, just bind-mounted in).
 
-Other targets:
+## Building and running
+
+For a raw-syscall example (`.globl _start`, no libc):
 
 ```sh
-make build FILE=book_excercises/chapter2/some_example.s   # assemble + link only, no run
-make clean                                                  # remove build/ artifacts
+mkdir -p build
+arm-linux-gnueabihf-as -o build/your_example.o book_excercises/chapter2/your_example.s
+arm-linux-gnueabihf-ld -o build/your_example build/your_example.o
+qemu-arm-static ./build/your_example
 ```
 
-### Examples that use libc (e.g. `printf`)
+(Note: `2.9.s`/`2.10.s` in this repo are data-layout exercises — `.data`
+only, no `.text`/`_start` — so they're not runnable programs. `2.13.s` below
+is the one complete, runnable example currently here.)
 
-Some exercises call into libc instead of raw syscalls (e.g. `bl printf`,
-`.globl main` instead of `.globl _start`). The macOS cross-binutils
-(`as`/`ld`) can't resolve libc symbols or build a proper dynamically-linked
-entry point, so these need a different target:
+For an example that calls into libc (e.g. `bl printf`, `.globl main`):
 
 ```sh
-make run-libc FILE=book_excercises/chapter2/2.13.s
+mkdir -p build
+arm-linux-gnueabihf-gcc -static -o build/2.13 book_excercises/chapter2/2.13.s
+qemu-arm-static ./build/2.13
 ```
 
-This assembles, links, and runs the file entirely inside the emulated
-ARMv7 container using its native `gcc` (built once into a local
-`assembly-playground-tools` image, cached after that — see
-`Dockerfile.tools`).
+Static linking (`-static`) matters for libc-based examples: it bundles libc
+into the binary itself, so there's no separate armhf sysroot to resolve at
+runtime — `qemu-arm-static` can just run the file directly.
 
 ## Writing your own examples
 
-Since there's no libc linked in by default, programs talk to the kernel
-directly via `svc #0` with the syscall number in `r7` and arguments in
-`r0`-`r6` (standard ARM EABI syscall convention — same numbers as Linux
-ARM32).
+Raw-syscall programs talk to the kernel directly via `svc #0`, with the
+syscall number in `r7` and arguments in `r0`-`r6` (standard ARM EABI syscall
+convention — same numbers as Linux ARM32).
 
 ## Debugging (step-by-step, registers, memory)
 
-You can step through a program instruction-by-instruction and watch
-registers/memory, either from the terminal or from VS Code.
+[GDB Cheat Sheet](https://github.com/reveng007/GDB-Cheat-Sheet)
 
-This can't work by just running `gdb` inside the same containers `run`/
-`run-libc` use: those are `linux/arm/v7` containers running under QEMU
-user-mode emulation (needed on any Mac, including Apple Silicon — Apple's
-own chips have no hardware AArch32 support at all), and QEMU's user-mode
-emulation doesn't implement `ptrace` across that boundary, which is what
-gdb normally needs to control a process (you'll see `ptrace: Function not
-implemented`). Instead, debugging runs the binary directly under
-`qemu-arm-static -g <port>`, which has its own built-in gdbstub — it
-controls the emulated CPU state directly, no ptrace involved — and connects
-to it with `gdb-multiarch` running *natively* (no emulation) via a second
-image, `assembly-playground-debug` (see `Dockerfile.debug`), built for your
-Mac's own architecture. Debug builds are always statically linked so that
-native image (which has no armhf libraries installed) never has to resolve
-shared libraries.
+Plain `gdb` can't work here: `gdb` normally controls a process via `ptrace`,
+but the process is actually running _inside_ `qemu-arm-static`'s user-mode
+emulation, and QEMU's linux-user mode doesn't implement `ptrace` on the
+emulated process — you'd hit `ptrace: Function not implemented`.
 
-### Terminal (gdb TUI)
+The fix: `qemu-arm-static` has its own built-in gdbstub. Instead of running
+`gdb` and having it `ptrace` the process, you start the binary paused under
+`qemu-arm-static -g <port>`, which controls the emulated CPU directly (no
+ptrace involved) and speaks the gdb remote protocol over that port. Then a
+normal `gdb-multiarch` connects to it like a remote target.
+
+Build with debug info first (`-g`), same as above:
 
 ```sh
-make debug      FILE=book_excercises/chapter2/some_example.s  # raw syscall example
-make debug-libc FILE=book_excercises/chapter2/2.13.s           # libc example (e.g. printf)
+arm-linux-gnueabihf-as -g -o build/your_example.o book_excercises/chapter2/your_example.s
+arm-linux-gnueabihf-ld -o build/your_example build/your_example.o
+# or for a libc example: arm-linux-gnueabihf-gcc -g -static -o build/2.13 book_excercises/chapter2/2.13.s
 ```
 
-Both build with debug info (`-g`, statically linked) and drop you into
-`gdb-multiarch -tui`, already connected to the running binary and stopped
-at `_start`. Useful commands once in gdb:
+Start it paused, listening for a debugger, in the background of the same
+shell (so its stdout stays visible right here once it runs):
 
-- For a libc-based example, run `break main` then `continue` first — the
-  entry point stops inside glibc's own startup code, which has no debug
-  info, so plain `next`/`step` there just runs to program exit instead of
-  reaching your code.
+```sh
+qemu-arm-static -g 1234 build/your_example &
+```
+
+Connect gdb to it:
+
+```sh
+gdb-multiarch -q \
+  -ex 'file build/your_example' \
+  -ex 'set architecture arm' \
+  -ex 'target remote localhost:1234'
+```
+
+You're now stopped at `_start`, in a normal gdb session. Useful commands:
+
 - `si` / `ni` — step one instruction (into / over calls)
-- `layout regs` — split view with registers alongside disassembly
-- `x/8xw $sp` — examine memory (8 hex words at the stack pointer)
-- `info registers` — dump all registers
+- `next` / `step` — step one source line (needs the `-g` debug info)
+- `info registers` — dump all registers (or `info registers r0` for one)
+- `x/16xb $r0` — examine memory: 16 hex bytes at the address in `r0`
+- `x/s $r0` — examine memory as a null-terminated string
+- `layout regs` then `si`/`ni` — TUI split view, registers + disassembly,
+  live as you step
+- `continue` — run to completion (or to the next breakpoint)
 
-### VS Code
-
-Requires the
-[C/C++ extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools)
-(`ms-vscode.cpptools`). VS Code's debugger drives `gdb-multiarch` by piping
-commands into a long-lived container (`docker exec`) that also runs
-`qemu-arm-static` as the actual debug target, since VS Code needs a running
-container to attach to rather than the one-shot ones `run`/`debug` use.
-
-1. Open the `.s` file you want to debug.
-2. Run and Debug panel → pick **Debug ARM asm (syscall)** or
-   **Debug ARM asm (libc)** (whichever matches the file) → press F5.
-
-This automatically starts the debug container if it isn't already running,
-rebuilds the current file with `-g` (statically linked), restarts
-`qemu-arm-static` inside the container serving the new binary, then
-connects. For libc examples a breakpoint on `main` is set automatically
-(same reason as above — it lands you past glibc's startup code). You get
-normal VS Code breakpoints, step controls, the Variables/Watch panels, a
-Registers view, and Debug Memory — set breakpoints by clicking the gutter
-next to a line.
-
-When you're done:
+For a **libc-based example** (e.g. `2.13.s`), connecting with `target
+remote` lands you at the raw ELF entry point (`_start`), which runs through
+glibc's own startup code before reaching your `main`. That startup code has
+no debug info, so plain `next`/`step` there just runs to program exit
+instead of reaching your code. Skip past it with a breakpoint instead:
 
 ```sh
-make debug-container-down
+gdb-multiarch -q \
+  -ex 'file build/2.13' \
+  -ex 'set architecture arm' \
+  -ex 'break main' \
+  -ex 'target remote localhost:1234' \
+  -ex 'continue'
 ```
 
-## Manual invocation
-
-If you want to skip `make`:
-
-```sh
-arm-linux-gnueabihf-as -o hello.o book_excercises/chapter2/some_example.s
-arm-linux-gnueabihf-ld -o hello hello.o
-docker run --rm --platform linux/arm/v7 -v "$PWD":/work -w /work debian:bookworm-slim ./hello
-```
+This stops you right at the first line of `main` — from there `next`/`step`
+work normally, and `bl printf`'s output prints directly in this same
+terminal once you step past (or continue past) it.
