@@ -5,7 +5,7 @@
                         .equ     ASCII_UNKNOWN_CODE, 46  @ '.' character
 
                         .section .rodata
-error_msg:              .asciz   "Error ocurred (%s), errno: %d"
+error_msg:              .asciz   "Error ocurred (%s), errno: %d\n"
 address_tmpl:           .asciz   "%08zx  "
 hex_sec_tmpl:           .asciz   "%02x "
 hex_sec_empt_tmpl:      .asciz   "   "
