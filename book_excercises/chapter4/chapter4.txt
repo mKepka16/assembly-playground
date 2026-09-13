@@ -1,0 +1,17 @@
+4.1
+6
+
+4.2
+I know that exercise asks for base 10, but I don't care, hex is good.
+1 mov r0,#1; r0=1
+2 mov r1,#0x20; r1=0x20  
+3 orr r1,r1,r0; r1=0x21
+4 lsl r1,#0x2; r1=0x84 - I assume it's lsl r1, r1, #0x2, there is no two argument lsl with immediate value, actually it exists but book doesn't list it
+5 orr r1,r1,r0; r1=0x85
+6 eor r0,r0,r1; r0=0x84
+7 lsr r1,r0,#3; r1=0x10
+
+4.3
+lsr vs asr
+lsr fills with 0, asr fills with MSB before the shift
+

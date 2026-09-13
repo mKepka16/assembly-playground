@@ -135,11 +135,13 @@ instead of reaching your code. Skip past it with a breakpoint instead:
 
 ```sh
 gdb-multiarch -q \
-  -ex 'file build/2.13' \
+  -ex 'file $(TARGET)' \
   -ex 'set architecture arm' \
   -ex 'break main' \
   -ex 'target remote localhost:1234' \
-  -ex 'continue'
+  -ex 'continue' \
+  -ex 'layout regs' \
+  -ex 'ni'
 ```
 
 This stops you right at the first line of `main` — from there `next`/`step`

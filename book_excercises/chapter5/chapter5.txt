@@ -1,0 +1,19 @@
+5.1
+Register is volatile when according to programming calling convention under use - it can be freely modified by any subroutine. Calling subroutine may alter its value.
+In ARM calling convention registers r0-r3 (a1-a4) are considered volatile. Mistake: I forgot about r12 - intra procedure scratch register.
+
+5.2
+Static variables live for the entire program duration. This includes variables in .data and .bss section.
+Automatic variables are created in runtime - they can be either on stack, or directly in the register.
+Usually, lifespan of automatic variables is constained by subroutine execution context.
+
+5.4
+Register and stack.
+
+5.5
+myfunc: stmfd sp!, {r4, r5}
+...
+ldmfd sp!, {r4, r5}
+bx lr
+
+

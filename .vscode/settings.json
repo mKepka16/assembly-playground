@@ -8,5 +8,9 @@
   "[arm]": {
     "editor.defaultFormatter": "jkillian.custom-local-formatters",
     "editor.formatOnSave": true
+  },
+  "editor.tabSize": 8,
+  "files.associations": {
+    "*.inc": "arm"
   }
 }
